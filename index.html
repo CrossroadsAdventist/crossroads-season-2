@@ -85,6 +85,7 @@
   <div class="row">
     <button class="btn btn-gold" id="playAllBtn">&#9654; Play All — Season 2</button>
     <button class="btn btn-ghost" id="shuffleBtn">&#8635; Shuffle</button>
+    <button class="btn btn-ghost" id="chunkBtn">&#8734; Keep playing with screen off</button>
   </div>
 
   <section class="card" aria-label="Now playing">
@@ -106,7 +107,8 @@
     </label>
   </section>
 
-  <audio id="player" preload="metadata"></audio>
+  <audio id="player" preload="auto"></audio>
+  <audio id="preloadAudio" preload="auto"></audio>
 
   <ol class="ep" id="episodeList"></ol>
 
@@ -114,6 +116,11 @@
     <p class="note" style="margin-top:0">
       Every episode is a complete story, followed by a thoughtful discussion from a
       biblical perspective. New episodes are added here as they are finished.
+    </p>
+    <p class="note">
+      &#8734; <b>Keep playing with screen off:</b> plays ~2-hour recordings, so
+      episodes keep going even when your phone screen turns off. The lock
+      screen still shows the episode that is playing.
     </p>
     <p class="note">
       Also on
@@ -146,6 +153,14 @@ var EPISODES = [
    desc:"Maya feels replaced when her best friend Jasmine befriends new girl Sophia."},
   {n:25, title:"Just One More Chance",              dur:"21:40", file:"episode-25-just-one-more-chance.mp3",
    desc:"Avery learns what forgiveness really means when her best friend keeps asking for just one more chance."}
+];
+
+var CHUNK_BASE = 'https://crossroadsadventist.github.io/crossroads-continuous/';
+var CHUNK_SCOPE = 's2';
+var CHUNKS = [
+  {file:"continuous-s2-part1.mp3", season:"s2", part:1, episodes:[22, 23, 24, 25],
+   titles:["Everybody Was Invited (Mini Movie)", "The Thing in the Dark", "The Replacement", "Just One More Chance"],
+   starts:[0.0, 2500.1, 4607.2, 6277.2], dur:7577.5},
 ];
 
 var audio = document.getElementById('player');
@@ -214,6 +229,10 @@ function fmt(s){
   if(!isFinite(s) || s == null) return "0:00";
   s = Math.floor(s);
   var m = Math.floor(s / 60), r = s % 60;
+  if(m >= 60){
+    var h = Math.floor(m / 60);
+    return h + ":" + (m % 60 < 10 ? "0" : "") + (m % 60) + ":" + (r < 10 ? "0" : "") + r;
+  }
   return m + ":" + (r < 10 ? "0" : "") + r;
 }
 
@@ -315,8 +334,184 @@ function checkForNewEpisodes(){
 }
 setInterval(checkForNewEpisodes, AUTO_UPDATE_MS);
 
+/* ---- Continuous mode: keep playing with the screen off ----
+   A phone freezes a web page's JavaScript when the screen turns off, so
+   the normal per-episode 'ended' handler can't run and playback stops at
+   the end of an episode. Continuous mode plays ~2-hour chunk files
+   (one file, many episodes back to back), so the phone just keeps playing
+   with no JavaScript needed at episode boundaries — the 'ended' handler
+   only has to run once every ~2 hours, at a chunk boundary.
+   The now-playing title and lock-screen (Media Session) metadata follow
+   the episode whose start offset the playhead has passed, using the
+   chunk manifest's `starts` array. Tapping an episode, Play All or
+   Shuffle leaves continuous mode (loadEpisode exits it). Tapping the
+   chunk button again while it is on also exits it: the current chunk
+   keeps playing to its end, then per-episode behaviour takes over.
+   Auto-update: chunks.json is polled every 5 minutes (same pattern as
+   the episodes.json poller). Chunks are merged by file name — a rebuilt
+   chunk updates in place, a brand-new chunk appends — and playback is
+   never touched. Rebuilds are append-only (only the last chunk of a
+   season is rebuilt, and its earlier start offsets never move), so an
+   in-progress chunk keeps showing the right episode after a poll. */
+var chunkMode = false;
+var chunkIdx = -1;
+var chunkEpIdx = -1;
+var preloadAudio = document.getElementById('preloadAudio');
+var preloadedUrl = '';
+
+function preloadUrl(url){
+  if(!url || url === preloadedUrl) return;
+  preloadedUrl = url;
+  try{ preloadAudio.src = url; preloadAudio.load(); }catch(e){}
+}
+function clearPreload(){
+  preloadedUrl = '';
+  try{ preloadAudio.removeAttribute('src'); preloadAudio.load(); }catch(e){}
+}
+function preloadNext(){
+  if(chunkMode){
+    var nx = CHUNKS[chunkIdx + 1];
+    if(nx) preloadUrl(CHUNK_BASE + nx.file);
+    return;
+  }
+  var ni = nextInQueue();
+  if(ni >= 0 && ni < EPISODES.length) preloadUrl(EPISODES[ni].file);
+}
+function episodeIndexByNumber(n){
+  for(var i = 0; i < EPISODES.length; i++) if(EPISODES[i].n === n) return i;
+  return -1;
+}
+function chunkEpisodeAt(t){
+  var ch = CHUNKS[chunkIdx];
+  if(!ch) return 0;
+  var k = 0;
+  for(var i = 0; i < ch.starts.length; i++){
+    if(t >= ch.starts[i]) k = i; else break;
+  }
+  return k;
+}
+function updateChunkEpisode(){
+  if(!chunkMode || chunkIdx < 0) return;
+  var ch = CHUNKS[chunkIdx];
+  var k = chunkEpisodeAt(audio.currentTime || 0);
+  if(k === chunkEpIdx) return;
+  chunkEpIdx = k;
+  var ei = episodeIndexByNumber(ch.episodes[k]);
+  if(ei < 0) return;
+  current = ei;
+  var ep = EPISODES[ei];
+  nowTitle.textContent = 'Episode ' + ep.n + ' \u2014 ' + ep.title;
+  nowSub.textContent = ep.desc + ' \u00b7 ' + ep.dur;
+  markCurrent();
+  if('mediaSession' in navigator){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Episode ' + ep.n + ' \u2014 ' + ep.title,
+      artist: 'Crossroads',
+      album: 'Crossroads \u2014 Season 2'
+    });
+  }
+  savePosition(audio.currentTime);
+}
+function loadChunk(ci, startAt, autoplay){
+  if(ci < 0 || ci >= CHUNKS.length) return;
+  setShuffle(false);
+  chunkMode = true;
+  chunkIdx = ci;
+  chunkEpIdx = -1;
+  var ch = CHUNKS[ci];
+  var b = document.getElementById('chunkBtn');
+  if(b) b.classList.add('active');
+  audio.src = CHUNK_BASE + ch.file;
+  audio.load();
+  totTimeEl.textContent = fmt(ch.dur);
+  updateChunkEpisode();
+  if(startAt > 0){
+    var once = function(){
+      try{ audio.currentTime = Math.min(startAt, (audio.duration || startAt + 1) - 5); }catch(e){}
+      audio.removeEventListener('loadedmetadata', once);
+      updateChunkEpisode();
+    };
+    audio.addEventListener('loadedmetadata', once);
+  }
+  preloadNext();
+  if(autoplay){
+    var p = audio.play();
+    if(p && p.catch) p.catch(function(){ /* waiting for a tap is fine */ });
+  }
+}
+function exitChunkMode(){
+  if(!chunkMode) return;
+  chunkMode = false;
+  chunkIdx = -1;
+  chunkEpIdx = -1;
+  var b = document.getElementById('chunkBtn');
+  if(b) b.classList.remove('active');
+  clearPreload();
+}
+function nextChunkEpisode(){
+  if(chunkIdx < 0) return;
+  var ch = CHUNKS[chunkIdx];
+  var k = chunkEpisodeAt(audio.currentTime || 0);
+  if(k + 1 < ch.episodes.length){
+    audio.currentTime = ch.starts[k + 1] + 0.5;
+    updateChunkEpisode();
+  }else if(chunkIdx + 1 < CHUNKS.length){
+    loadChunk(chunkIdx + 1, 0, true);
+  }
+}
+function prevChunkEpisode(){
+  if(chunkIdx < 0) return;
+  var ch = CHUNKS[chunkIdx];
+  var t = audio.currentTime || 0;
+  var k = chunkEpisodeAt(t);
+  if(t - ch.starts[k] > 5){
+    audio.currentTime = ch.starts[k];
+    updateChunkEpisode();
+  }else if(k > 0){
+    audio.currentTime = ch.starts[k - 1] + 0.5;
+    updateChunkEpisode();
+  }else if(chunkIdx > 0){
+    var prev = CHUNKS[chunkIdx - 1];
+    loadChunk(chunkIdx - 1, Math.max(0, prev.dur - 5), true);
+  }else{
+    audio.currentTime = 0;
+    updateChunkEpisode();
+  }
+}
+function startChunkMode(){
+  if(chunkMode){ exitChunkMode(); return; }
+  setShuffle(false);
+  continuousEl.checked = true;
+  loadChunk(0, 0, true);
+  document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function checkForNewChunks(){
+  fetch(CHUNK_BASE + 'chunks.json?_=' + Date.now(), {cache: 'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    var list = Array.isArray(data) ? data : data.chunks;
+    if(!list) return;
+    var byFile = {};
+    CHUNKS.forEach(function(c, idx){ byFile[c.file] = idx; });
+    list.forEach(function(c){
+      if(!c || !c.file || !c.episodes || !c.starts) return;
+      if(CHUNK_SCOPE !== 'all' && c.season !== CHUNK_SCOPE) return;
+      if(byFile[c.file] != null){
+        CHUNKS[byFile[c.file]] = c;
+      }else{
+        CHUNKS.push(c);
+      }
+    });
+  }).catch(function(){ /* offline / not published yet — retry next poll */ });
+}
+setInterval(checkForNewChunks, AUTO_UPDATE_MS);
+document.getElementById('chunkBtn').addEventListener('click', startChunkMode);
+
+
 function loadEpisode(i, autoplay){
   if(i < 0 || i >= EPISODES.length) return;
+  exitChunkMode();
   current = i;
   if(shuffleOn) shufflePos = shuffleQueue.indexOf(i);
   var ep = EPISODES[i];
@@ -334,6 +529,7 @@ function loadEpisode(i, autoplay){
       album: 'Crossroads \u2014 Season 2'
     });
   }
+  preloadNext();
   if(autoplay){
     var p = audio.play();
     if(p && p.catch) p.catch(function(){ /* waiting for a tap is fine */ });
@@ -347,6 +543,10 @@ function togglePlay(){
 
 function savePosition(t){
   try{
+    if(chunkMode && chunkIdx >= 0 && CHUNKS[chunkIdx]){
+      localStorage.setItem('crossroads-s2', JSON.stringify({mode: 'chunk', chunk: CHUNKS[chunkIdx].file, t: t, i: current}));
+      return;
+    }
     localStorage.setItem('crossroads-s2', JSON.stringify({i: current, t: t}));
   }catch(e){ /* private mode etc. \u2014 ignore */ }
 }
@@ -356,6 +556,14 @@ function restorePosition(){
     var raw = localStorage.getItem('crossroads-s2');
     if(!raw) return;
     var s = JSON.parse(raw);
+    if(s && s.mode === 'chunk' && typeof s.chunk === 'string'){
+      var ci = -1;
+      for(var i = 0; i < CHUNKS.length; i++) if(CHUNKS[i].file === s.chunk) ci = i;
+      if(ci >= 0){
+        loadChunk(ci, (typeof s.t === 'number' && s.t > 10) ? s.t : 0, false);
+        return;
+      }
+    }
     if(typeof s.i !== 'number' || s.i < 0 || s.i >= EPISODES.length) return;
     loadEpisode(s.i, false);
     if(typeof s.t === 'number' && s.t > 10){
@@ -379,10 +587,16 @@ audio.addEventListener('timeupdate', function(){
     seek.value = Math.floor(audio.currentTime || 0);
   }
   curTimeEl.textContent = fmt(audio.currentTime);
+  if(chunkMode) updateChunkEpisode();
   if(Math.floor(audio.currentTime || 0) % 5 === 0) savePosition(audio.currentTime);
 });
 audio.addEventListener('ended', function(){
   savePosition(0);
+  if(chunkMode){
+    if(chunkIdx + 1 < CHUNKS.length){ loadChunk(chunkIdx + 1, 0, true); }
+    else{ playBtn.innerHTML = '&#9654;'; }
+    return;
+  }
   var nxt = nextInQueue();
   if(continuousEl.checked && nxt >= 0 && nxt < EPISODES.length){
     loadEpisode(nxt, true);
@@ -401,11 +615,13 @@ seek.addEventListener('input', function(){
 
 playBtn.addEventListener('click', togglePlay);
 document.getElementById('prevBtn').addEventListener('click', function(){
+  if(chunkMode){ prevChunkEpisode(); return; }
   var prv = prevInQueue();
   if(prv < 0){ audio.currentTime = 0; return; }
   loadEpisode(prv, true);
 });
 document.getElementById('nextBtn').addEventListener('click', function(){
+  if(chunkMode){ nextChunkEpisode(); return; }
   var nxt = nextInQueue();
   if(nxt >= 0 && nxt < EPISODES.length) loadEpisode(nxt, true);
 });
@@ -423,10 +639,12 @@ document.getElementById('shuffleBtn').addEventListener('click', function(){
 if('mediaSession' in navigator){
   try{
     navigator.mediaSession.setActionHandler('previoustrack', function(){
+      if(chunkMode){ prevChunkEpisode(); return; }
       var prv = prevInQueue();
       if(prv >= 0) loadEpisode(prv, true);
     });
     navigator.mediaSession.setActionHandler('nexttrack', function(){
+      if(chunkMode){ nextChunkEpisode(); return; }
       var nxt = nextInQueue();
       if(nxt >= 0 && nxt < EPISODES.length) loadEpisode(nxt, true);
     });
