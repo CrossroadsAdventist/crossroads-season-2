@@ -120,7 +120,7 @@
       <a href="https://open.spotify.com/show/4kSRaNLoz4u34nFCMUw7KV">Spotify</a>
       &middot; full-quality files are in the
       <a href="https://drive.google.com/drive/folders/1ycbZTgMK3zHMKOeKOfqJWGrsqoL8gJnZ">Google Drive folder</a>
-      &middot; all 23 episodes on one page:
+      &middot; all 24 episodes on one page:
       <a href="https://crossroadsadventist.github.io/crossroads/">All Episodes</a>.
     </p>
   </section>
@@ -141,7 +141,7 @@ var EPISODES = [
   {n:22, title:"Everybody Was Invited (Mini Movie)", dur:"41:40", file:"episode-22-everybody-was-invited-mini-movie.mp3",
    desc:"Sienna throws a secret Halloween party while her parents are away \u2014 and it gets out of hand."},
   {n:23, title:"The Thing in the Dark",             dur:"35:07", file:"episode-23-the-thing-in-the-dark.mp3",
-   desc:"Ethan sneaks out on Friday night to a horror movie \u2014 and has to face what he chose."}
+   desc:"Ethan sneaks out on Friday night to a horror movie \u2014 and has to face what he chose."},
   {n:24, title:"The Replacement",                   dur:"27:50", file:"episode-24-the-replacement.mp3",
    desc:"Maya feels replaced when her best friend Jasmine befriends new girl Sophia."}
 ];
@@ -215,23 +215,26 @@ function fmt(s){
   return m + ":" + (r < 10 ? "0" : "") + r;
 }
 
+function appendEpisode(ep, i){
+  var li = document.createElement('li');
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.id = 'ep-btn-' + i;
+  b.innerHTML =
+    '<span class="num">' + ep.n + '</span>' +
+    '<span style="flex:1;min-width:0;text-align:left">' +
+      '<h3>Episode ' + ep.n + ' \u2014 ' + ep.title + '</h3>' +
+      '<p>' + ep.desc + '</p>' +
+    '</span>' +
+    '<span class="dur">' + ep.dur + '</span>';
+  b.addEventListener('click', function(){ loadEpisode(i, true); });
+  li.appendChild(b);
+  var target = listTargetFor(ep);
+  if(target) target.appendChild(li);
+}
+
 function buildList(){
-  EPISODES.forEach(function(ep, i){
-    var li = document.createElement('li');
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.id = 'ep-btn-' + i;
-    b.innerHTML =
-      '<span class="num">' + ep.n + '</span>' +
-      '<span style="flex:1;min-width:0;text-align:left">' +
-        '<h3>Episode ' + ep.n + ' \u2014 ' + ep.title + '</h3>' +
-        '<p>' + ep.desc + '</p>' +
-      '</span>' +
-      '<span class="dur">' + ep.dur + '</span>';
-    b.addEventListener('click', function(){ loadEpisode(i, true); });
-    li.appendChild(b);
-    listEl.appendChild(li);
-  });
+  EPISODES.forEach(function(ep, i){ appendEpisode(ep, i); });
 }
 
 function markCurrent(){
@@ -240,6 +243,75 @@ function markCurrent(){
     if(b) b.classList.toggle('current', i === current);
   });
 }
+
+/* ---- Auto-update: pick up newly published episodes without a refresh ----
+   The page polls episodes.json every 5 minutes. Any episode number not
+   already in EPISODES is appended to the list (and, if shuffle is on, to
+   the shuffle queue after the current position). Playback is never
+   touched: the current episode keeps playing, and new episodes join the
+   queue after it finishes. Existing episodes are never reordered,
+   duplicated, or removed. */
+var AUTO_UPDATE_MS = 5 * 60 * 1000;
+
+function listTargetFor(ep){
+  var s1 = document.getElementById('episodeListS1');
+  var s2 = document.getElementById('episodeListS2');
+  if(s1 && s2) return (ep.n <= 21 ? s1 : s2);
+  return document.getElementById('episodeList');
+}
+
+function totalLabel(){
+  var s = 0;
+  EPISODES.forEach(function(ep){
+    var p = String(ep.dur).split(':');
+    s += (+p[0]) * 60 + (+p[1]);
+  });
+  var h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  if(m === 60){ h += 1; m = 0; }
+  var t = 'about ' + h + (h === 1 ? ' hour' : ' hours');
+  if(m > 0) t += ' ' + (m < 10 ? '0' + m : m) + ' minutes';
+  return t;
+}
+
+function updateHeaderMeta(){
+  var meta = document.querySelector('header .meta');
+  if(!meta) return;
+  meta.innerHTML = meta.innerHTML
+    .replace(/\d+ episodes/, EPISODES.length + ' episodes')
+    .replace(/about [^<]*/, totalLabel());
+}
+
+function checkForNewEpisodes(){
+  fetch('episodes.json?_=' + Date.now(), {cache: 'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    var eps = Array.isArray(data) ? data : data.episodes;
+    if(!eps) return;
+    var known = {};
+    EPISODES.forEach(function(ep){ known[ep.n] = true; });
+    var fresh = eps.filter(function(ep){
+      return ep && typeof ep.n === 'number' && ep.file && ep.title && !known[ep.n];
+    });
+    if(!fresh.length) return;
+    fresh.sort(function(a, b){ return a.n - b.n; });
+    var newIdxs = [];
+    fresh.forEach(function(ep){
+      newIdxs.push(EPISODES.length);
+      EPISODES.push(ep);
+      appendEpisode(ep, EPISODES.length - 1);
+    });
+    if(shuffleOn){
+      newIdxs.forEach(function(idx){
+        var lo = Math.max(0, shufflePos + 1);
+        var pos = lo + Math.floor(Math.random() * (shuffleQueue.length - lo + 1));
+        shuffleQueue.splice(pos, 0, idx);
+      });
+    }
+    updateHeaderMeta();
+  }).catch(function(){ /* offline / not published yet — retry next poll */ });
+}
+setInterval(checkForNewEpisodes, AUTO_UPDATE_MS);
 
 function loadEpisode(i, autoplay){
   if(i < 0 || i >= EPISODES.length) return;
