@@ -36,11 +36,28 @@ until Hanna says yes — this folder is prepared, not live.
    auto-advances to Episode 23, and the page opens on a phone with no
    sign-in — the same checks that passed for Season 1.
 
+## Continuous mode (Keep playing with screen off)
+
+The player has a "Keep playing with screen off" button. It plays the
+~2-hour chunk recordings from the
+[`crossroads-continuous`](https://github.com/CrossroadsAdventist/crossroads-continuous)
+repo instead of the individual episode files, so playback keeps going
+when a phone screen turns off (a frozen page can't run the per-episode
+auto-advance). The lock screen still shows the episode that's playing.
+Season 2's chunk lives in that repo; this page polls its `chunks.json`
+every 5 minutes and picks up rebuilt chunks without a refresh.
+**This file is the template for the combined All-Episodes player** —
+`player-deploy-all/build_combined.py` builds that page from this one,
+so keep the chunk code here in sync with the combined page.
+
 ## Updating it later
 
 To add a future Season 2 episode, drop the new MP3 into the repo folder,
 add its entry to the EPISODES list in `index.html` (episode numbers run
 continuously across seasons: Season 2 starts at 22), commit and push.
+Then rebuild the Season 2 continuous chunk (see the rebuild rule in the
+`crossroads-continuous` repo README — only the last chunk is rebuilt,
+append-only) and re-run `build_combined.py` for the All-Episodes page.
 
 ## Other places to listen
 
