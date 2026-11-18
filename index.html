@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Crossroads — Season 2 | Adventist Stories For Teens</title>
+<meta name="description" content="Crossroads: a Seventh-day Adventist Christian audio drama series for teenagers. Hosts Ellie Grant and Marcus Lee introduce each story, then a full cast brings it to life.">
+<style>
+  :root{
+    --bg:#171310; --card:#221c18; --card2:#2a231e; --ink:#f5efe6; --muted:#c9bda9;
+    --gold:#e8a33d; --gold-soft:#f2c078; --line:#3a312a; --playing:#3d2f1d;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;}
+  .wrap{max-width:720px;margin:0 auto;padding:20px 16px 64px}
+  header{text-align:center;margin-bottom:20px}
+  header img.cover{width:min(300px,72vw);height:auto;border-radius:16px;
+    box-shadow:0 12px 40px rgba(0,0,0,.55);display:block;margin:0 auto 16px}
+  h1{font-size:2.1rem;letter-spacing:.14em;margin:0 0 4px;text-transform:uppercase}
+  .tag{color:var(--gold-soft);font-size:1.02rem;margin:0 0 6px}
+  .meta{color:var(--muted);font-size:.92rem;margin:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:16px;margin:16px 0}
+  .btn{display:inline-block;border:0;border-radius:999px;cursor:pointer;
+    font:inherit;font-weight:700;padding:12px 22px}
+  .btn-gold{background:var(--gold);color:#241a08}
+  .btn-gold:active{transform:translateY(1px)}
+  .btn-ghost{background:transparent;color:var(--gold-soft);
+    border:1px solid var(--gold);padding:9px 16px;font-weight:600}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
+  .now-title{font-size:1.15rem;font-weight:700;margin:2px 0 2px}
+  .now-sub{color:var(--muted);font-size:.9rem;margin:0 0 12px}
+  .seek{display:flex;align-items:center;gap:10px;margin:6px 0 2px}
+  .seek time{font-variant-numeric:tabular-nums;font-size:.88rem;color:var(--muted);
+    min-width:44px}
+  .seek time:last-child{text-align:right}
+  input[type=range]{flex:1;accent-color:var(--gold);height:28px;cursor:pointer}
+  .transport{display:flex;justify-content:center;align-items:center;gap:18px;margin:10px 0 4px}
+  .tbtn{background:var(--card2);color:var(--ink);border:1px solid var(--line);
+    border-radius:50%;width:52px;height:52px;font-size:1.25rem;cursor:pointer}
+  .tbtn.play{background:var(--gold);color:#241a08;width:64px;height:64px;
+    font-size:1.6rem;border:0}
+  .toggle{display:flex;justify-content:center;align-items:center;gap:8px;
+    color:var(--muted);font-size:.92rem;margin-top:10px}
+  .toggle input{accent-color:var(--gold);width:18px;height:18px}
+  .ep{list-style:none;margin:0;padding:0}
+  .ep li{margin:0}
+  .ep button{all:unset;display:flex;gap:12px;width:100%;cursor:pointer;
+    padding:13px 12px;border-radius:12px}
+  .ep button:hover{background:var(--card2)}
+  .ep button.current{background:var(--playing);outline:1px solid var(--gold)}
+  .num{flex:0 0 30px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;
+    padding-top:1px;text-align:right}
+  .ep h3{margin:0;font-size:1.02rem}
+  .ep p{margin:2px 0 0;color:var(--muted);font-size:.9rem}
+  .dur{flex:0 0 auto;color:var(--muted);font-size:.88rem;font-variant-numeric:tabular-nums;
+    padding-top:2px}
+  .note{color:var(--muted);font-size:.9rem}
+  .note a{color:var(--gold-soft)}
+  footer{text-align:center;color:var(--muted);font-size:.92rem;margin-top:28px}
+  footer .sign{color:var(--gold-soft);font-style:italic;font-size:1.05rem;margin-bottom:14px}
+  footer a{color:var(--gold-soft)}
+  .links a{display:inline-block;margin:4px 8px}
+  @media (max-width:420px){
+    h1{font-size:1.7rem}
+    .ep button{gap:9px;padding:12px 8px}
+    .num{flex-basis:24px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <img class="cover" src="cover.jpg" alt="Crossroads — a wooden signpost at a crossroads at golden dusk">
+    <h1>Crossroads</h1>
+    <p class="tag">Adventist Stories For Teens</p>
+    <p class="meta">Hosted by Ellie Grant &amp; Marcus Lee &middot; Season 2 &middot; 2 episodes &middot; about 1 hour 17 minutes</p>
+  </header>
+
+  <div class="row">
+    <button class="btn btn-gold" id="playAllBtn">&#9654; Play All — Season 2</button>
+  </div>
+
+  <section class="card" aria-label="Now playing">
+    <p class="now-title" id="nowTitle">Nothing playing yet</p>
+    <p class="now-sub" id="nowSub">Pick an episode below, or press Play All.</p>
+    <div class="seek">
+      <time id="curTime">0:00</time>
+      <input type="range" id="seek" min="0" max="0" step="1" value="0" aria-label="Seek">
+      <time id="totTime">0:00</time>
+    </div>
+    <div class="transport">
+      <button class="tbtn" id="prevBtn" aria-label="Previous episode">&#9198;</button>
+      <button class="tbtn play" id="playBtn" aria-label="Play or pause">&#9654;</button>
+      <button class="tbtn" id="nextBtn" aria-label="Next episode">&#9197;</button>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="continuous" checked>
+      Play back-to-back (next episode starts automatically)
+    </label>
+  </section>
+
+  <audio id="player" preload="metadata"></audio>
+
+  <ol class="ep" id="episodeList"></ol>
+
+  <section class="card">
+    <p class="note" style="margin-top:0">
+      Every episode is a complete story, followed by a thoughtful discussion from a
+      biblical perspective. New episodes are added here as they are finished.
+    </p>
+    <p class="note">
+      Also on
+      <a href="https://open.spotify.com/show/4kSRaNLoz4u34nFCMUw7KV">Spotify</a>
+      &middot; full-quality files are in the
+      <a href="https://drive.google.com/drive/folders/1ycbZTgMK3zHMKOeKOfqJWGrsqoL8gJnZ">Google Drive folder</a>.
+    </p>
+  </section>
+
+  <footer>
+    <p class="sign">&ldquo;You are not alone at the crossroads.&rdquo;</p>
+    <p class="links">
+      <a href="https://open.spotify.com/show/4kSRaNLoz4u34nFCMUw7KV">Spotify</a>
+      <a href="https://drive.google.com/drive/folders/1ycbZTgMK3zHMKOeKOfqJWGrsqoL8gJnZ">Google Drive</a>
+    </p>
+    <p>Crossroads Studios &middot; Season 2</p>
+  </footer>
+
+</div>
+
+<script>
+var EPISODES = [
+  {n:22, title:"Everybody Was Invited (Mini Movie)", dur:"41:40", file:"episode-22-everybody-was-invited-mini-movie.mp3",
+   desc:"Sienna throws a secret Halloween party while her parents are away \u2014 and it gets out of hand."},
+  {n:23, title:"The Thing in the Dark",             dur:"35:07", file:"episode-23-the-thing-in-the-dark.mp3",
+   desc:"Ethan sneaks out on Friday night to a horror movie \u2014 and has to face what he chose."}
+];
+
+var audio = document.getElementById('player');
+var seek = document.getElementById('seek');
+var curTimeEl = document.getElementById('curTime');
+var totTimeEl = document.getElementById('totTime');
+var nowTitle = document.getElementById('nowTitle');
+var nowSub = document.getElementById('nowSub');
+var playBtn = document.getElementById('playBtn');
+var listEl = document.getElementById('episodeList');
+var continuousEl = document.getElementById('continuous');
+var current = -1;
+
+function fmt(s){
+  if(!isFinite(s) || s == null) return "0:00";
+  s = Math.floor(s);
+  var m = Math.floor(s / 60), r = s % 60;
+  return m + ":" + (r < 10 ? "0" : "") + r;
+}
+
+function buildList(){
+  EPISODES.forEach(function(ep, i){
+    var li = document.createElement('li');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'ep-btn-' + i;
+    b.innerHTML =
+      '<span class="num">' + ep.n + '</span>' +
+      '<span style="flex:1;min-width:0;text-align:left">' +
+        '<h3>Episode ' + ep.n + ' \u2014 ' + ep.title + '</h3>' +
+        '<p>' + ep.desc + '</p>' +
+      '</span>' +
+      '<span class="dur">' + ep.dur + '</span>';
+    b.addEventListener('click', function(){ loadEpisode(i, true); });
+    li.appendChild(b);
+    listEl.appendChild(li);
+  });
+}
+
+function markCurrent(){
+  EPISODES.forEach(function(_, i){
+    var b = document.getElementById('ep-btn-' + i);
+    if(b) b.classList.toggle('current', i === current);
+  });
+}
+
+function loadEpisode(i, autoplay){
+  if(i < 0 || i >= EPISODES.length) return;
+  current = i;
+  var ep = EPISODES[i];
+  audio.src = ep.file;
+  audio.load();
+  nowTitle.textContent = 'Episode ' + ep.n + ' \u2014 ' + ep.title;
+  nowSub.textContent = ep.desc + ' \u00b7 ' + ep.dur;
+  totTimeEl.textContent = ep.dur;
+  markCurrent();
+  savePosition(0);
+  if('mediaSession' in navigator){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Episode ' + ep.n + ' \u2014 ' + ep.title,
+      artist: 'Crossroads',
+      album: 'Crossroads \u2014 Season 2'
+    });
+  }
+  if(autoplay){
+    var p = audio.play();
+    if(p && p.catch) p.catch(function(){ /* waiting for a tap is fine */ });
+  }
+}
+
+function togglePlay(){
+  if(current < 0){ loadEpisode(0, true); return; }
+  if(audio.paused){ audio.play(); } else { audio.pause(); }
+}
+
+function savePosition(t){
+  try{
+    localStorage.setItem('crossroads-s2', JSON.stringify({i: current, t: t}));
+  }catch(e){ /* private mode etc. \u2014 ignore */ }
+}
+
+function restorePosition(){
+  try{
+    var raw = localStorage.getItem('crossroads-s2');
+    if(!raw) return;
+    var s = JSON.parse(raw);
+    if(typeof s.i !== 'number' || s.i < 0 || s.i >= EPISODES.length) return;
+    loadEpisode(s.i, false);
+    if(typeof s.t === 'number' && s.t > 10){
+      var once = function(){
+        try{ audio.currentTime = Math.min(s.t, (audio.duration || s.t + 1) - 5); }catch(e){}
+        audio.removeEventListener('loadedmetadata', once);
+      };
+      audio.addEventListener('loadedmetadata', once);
+    }
+  }catch(e){ /* ignore */ }
+}
+
+audio.addEventListener('play', function(){ playBtn.innerHTML = '&#10074;&#10074;'; });
+audio.addEventListener('pause', function(){ playBtn.innerHTML = '&#9654;'; });
+audio.addEventListener('loadedmetadata', function(){
+  seek.max = Math.floor(audio.duration || 0);
+  totTimeEl.textContent = fmt(audio.duration);
+});
+audio.addEventListener('timeupdate', function(){
+  if(!seek.matches(':active')){
+    seek.value = Math.floor(audio.currentTime || 0);
+  }
+  curTimeEl.textContent = fmt(audio.currentTime);
+  if(Math.floor(audio.currentTime || 0) % 5 === 0) savePosition(audio.currentTime);
+});
+audio.addEventListener('ended', function(){
+  savePosition(0);
+  if(continuousEl.checked && current + 1 < EPISODES.length){
+    loadEpisode(current + 1, true);
+  }else{
+    playBtn.innerHTML = '&#9654;';
+  }
+});
+audio.addEventListener('error', function(){
+  nowSub.textContent = 'This episode couldn\u2019t load just now. Check your connection and tap play again.';
+});
+
+seek.addEventListener('input', function(){
+  audio.currentTime = parseFloat(seek.value) || 0;
+  curTimeEl.textContent = fmt(audio.currentTime);
+});
+
+playBtn.addEventListener('click', togglePlay);
+document.getElementById('prevBtn').addEventListener('click', function(){
+  if(current <= 0){ audio.currentTime = 0; return; }
+  loadEpisode(current - 1, true);
+});
+document.getElementById('nextBtn').addEventListener('click', function(){
+  if(current + 1 < EPISODES.length) loadEpisode(current + 1, true);
+});
+document.getElementById('playAllBtn').addEventListener('click', function(){
+  continuousEl.checked = true;
+  loadEpisode(0, true);
+  document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+if('mediaSession' in navigator){
+  try{
+    navigator.mediaSession.setActionHandler('previoustrack', function(){
+      if(current > 0) loadEpisode(current - 1, true);
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', function(){
+      if(current + 1 < EPISODES.length) loadEpisode(current + 1, true);
+    });
+  }catch(e){ /* ignore */ }
+}
+
+buildList();
+restorePosition();
+</script>
+</body>
+</html>
