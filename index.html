@@ -30,6 +30,7 @@
   .btn-gold:active{transform:translateY(1px)}
   .btn-ghost{background:transparent;color:var(--gold-soft);
     border:1px solid var(--gold);padding:9px 16px;font-weight:600}
+  .btn-ghost.active{background:var(--gold);color:#241a08;border-color:var(--gold)}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
   .now-title{font-size:1.15rem;font-weight:700;margin:2px 0 2px}
   .now-sub{color:var(--muted);font-size:.9rem;margin:0 0 12px}
@@ -83,6 +84,7 @@
 
   <div class="row">
     <button class="btn btn-gold" id="playAllBtn">&#9654; Play All — Season 2</button>
+    <button class="btn btn-ghost" id="shuffleBtn">&#8635; Shuffle</button>
   </div>
 
   <section class="card" aria-label="Now playing">
@@ -140,6 +142,8 @@ var EPISODES = [
    desc:"Sienna throws a secret Halloween party while her parents are away \u2014 and it gets out of hand."},
   {n:23, title:"The Thing in the Dark",             dur:"35:07", file:"episode-23-the-thing-in-the-dark.mp3",
    desc:"Ethan sneaks out on Friday night to a horror movie \u2014 and has to face what he chose."}
+  {n:24, title:"The Replacement",                   dur:"27:50", file:"episode-24-the-replacement.mp3",
+   desc:"Maya feels replaced when her best friend Jasmine befriends new girl Sophia."}
 ];
 
 var audio = document.getElementById('player');
@@ -152,6 +156,57 @@ var playBtn = document.getElementById('playBtn');
 var listEl = document.getElementById('episodeList');
 var continuousEl = document.getElementById('continuous');
 var current = -1;
+var shuffleOn = false;
+var shuffleQueue = [];
+var shufflePos = -1;
+
+function shuffleArray(a){
+  for(var i = a.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function makeShuffleQueue(first){
+  var idxs = EPISODES.map(function(_, i){ return i; });
+  shuffleArray(idxs);
+  if(typeof first === 'number' && first >= 0){
+    var k = idxs.indexOf(first);
+    if(k > 0){ idxs.splice(k, 1); idxs.unshift(first); }
+  }
+  return idxs;
+}
+function setShuffle(on){
+  shuffleOn = on;
+  var b = document.getElementById('shuffleBtn');
+  if(b) b.classList.toggle('active', on);
+  if(on){
+    shuffleQueue = makeShuffleQueue(current);
+    shufflePos = current >= 0 ? 0 : -1;
+  }else{
+    shuffleQueue = [];
+    shufflePos = -1;
+  }
+}
+function nextInQueue(){
+  if(!shuffleOn) return current + 1;
+  if(shufflePos + 1 < shuffleQueue.length) return shuffleQueue[shufflePos + 1];
+  shuffleQueue = makeShuffleQueue(-1);
+  shufflePos = -1;
+  return shuffleQueue.length ? shuffleQueue[0] : -1;
+}
+function prevInQueue(){
+  if(!shuffleOn) return current - 1;
+  if(shufflePos > 0) return shuffleQueue[shufflePos - 1];
+  return -1;
+}
+function startShuffle(){
+  setShuffle(true);
+  continuousEl.checked = true;
+  loadEpisode(shuffleQueue[0], true);
+  document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
 
 function fmt(s){
   if(!isFinite(s) || s == null) return "0:00";
@@ -189,6 +244,7 @@ function markCurrent(){
 function loadEpisode(i, autoplay){
   if(i < 0 || i >= EPISODES.length) return;
   current = i;
+  if(shuffleOn) shufflePos = shuffleQueue.indexOf(i);
   var ep = EPISODES[i];
   audio.src = ep.file;
   audio.load();
@@ -253,8 +309,9 @@ audio.addEventListener('timeupdate', function(){
 });
 audio.addEventListener('ended', function(){
   savePosition(0);
-  if(continuousEl.checked && current + 1 < EPISODES.length){
-    loadEpisode(current + 1, true);
+  var nxt = nextInQueue();
+  if(continuousEl.checked && nxt >= 0 && nxt < EPISODES.length){
+    loadEpisode(nxt, true);
   }else{
     playBtn.innerHTML = '&#9654;';
   }
@@ -270,25 +327,34 @@ seek.addEventListener('input', function(){
 
 playBtn.addEventListener('click', togglePlay);
 document.getElementById('prevBtn').addEventListener('click', function(){
-  if(current <= 0){ audio.currentTime = 0; return; }
-  loadEpisode(current - 1, true);
+  var prv = prevInQueue();
+  if(prv < 0){ audio.currentTime = 0; return; }
+  loadEpisode(prv, true);
 });
 document.getElementById('nextBtn').addEventListener('click', function(){
-  if(current + 1 < EPISODES.length) loadEpisode(current + 1, true);
+  var nxt = nextInQueue();
+  if(nxt >= 0 && nxt < EPISODES.length) loadEpisode(nxt, true);
 });
 document.getElementById('playAllBtn').addEventListener('click', function(){
+  setShuffle(false);
   continuousEl.checked = true;
   loadEpisode(0, true);
   document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
+});
+document.getElementById('shuffleBtn').addEventListener('click', function(){
+  if(shuffleOn){ setShuffle(false); }
+  else{ startShuffle(); }
 });
 
 if('mediaSession' in navigator){
   try{
     navigator.mediaSession.setActionHandler('previoustrack', function(){
-      if(current > 0) loadEpisode(current - 1, true);
+      var prv = prevInQueue();
+      if(prv >= 0) loadEpisode(prv, true);
     });
     navigator.mediaSession.setActionHandler('nexttrack', function(){
-      if(current + 1 < EPISODES.length) loadEpisode(current + 1, true);
+      var nxt = nextInQueue();
+      if(nxt >= 0 && nxt < EPISODES.length) loadEpisode(nxt, true);
     });
   }catch(e){ /* ignore */ }
 }
