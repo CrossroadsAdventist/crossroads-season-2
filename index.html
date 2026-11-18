@@ -79,7 +79,7 @@
     <img class="cover" src="cover.jpg" alt="Crossroads — a wooden signpost at a crossroads at golden dusk">
     <h1>Crossroads</h1>
     <p class="tag">Adventist Stories For Teens</p>
-    <p class="meta">Hosted by Ellie Grant &amp; Marcus Lee &middot; Season 2 &middot; 10 episodes &middot; about 4 hours 23 minutes</p>
+    <p class="meta">Hosted by Ellie Grant &amp; Marcus Lee &middot; Season 2 &middot; 11 episodes &middot; about 4 hours 48 minutes</p>
   </header>
 
   <div class="row">
@@ -153,7 +153,7 @@ var EPISODES = [
    desc:"Maya feels replaced when her best friend Jasmine befriends new girl Sophia."},
   {n:25, title:"Just One More Chance",              dur:"21:40", file:"episode-25-just-one-more-chance.mp3",
    desc:"Avery learns what forgiveness really means when her best friend keeps asking for just one more chance."},
-  {n:26, title:"The Empty Chair",                   dur:"19:19", file:"episode-26-the-empty-chair.mp3",
+  {n:26, title:"The Empty Chair",                   dur:"19:21", file:"episode-26-the-empty-chair.mp3",
    desc:"Jordan has worked hard for the Student Achievement Evening, and Dad has promised to be there \u2014 but he has promised before."},
   {n:27, title:"Between Two Homes",                 dur:"21:30", file:"episode-27-between-two-homes.mp3",
    desc:"Jordan lives between two homes after the divorce \u2014 and the school showcase forces both parents into the same room."},
@@ -164,7 +164,9 @@ var EPISODES = [
   {n:30, title:"Just Between Us",                   dur:"27:49", file:"episode-30-just-between-us.mp3",
    desc:"A private picture Destiny shared with Jace starts circulating among his friends \u2014 and she has to decide who she can trust."},
   {n:31, title:"When Heaven Is Quiet",              dur:"18:15", file:"episode-31-when-heaven-is-quiet.mp3",
-   desc:"Gloria has prayed for her little brother Micah's heart condition for six months \u2014 and nothing has changed."}
+   desc:"Gloria has prayed for her little brother Micah's heart condition for six months \u2014 and nothing has changed."},
+  {n:32, title:"The Screenshot",                      dur:"25:08", file:"episode-32-the-screenshot.mp3",
+   desc:"Kiara has to decide what loyalty really means when a private screenshot of her friend Nia spreads through school."}
 ];
 
 var CHUNK_BASE = 'https://crossroadsadventist.github.io/crossroads-continuous/';
@@ -172,13 +174,13 @@ var CHUNK_SCOPE = 's2';
 var CHUNKS = [
   {file:"continuous-s2-part1.mp3", season:"s2", part:1, episodes:[22, 23, 24, 25],
    titles:["Everybody Was Invited (Mini Movie)", "The Thing in the Dark", "The Replacement", "Just One More Chance"],
-   starts:[0.0, 2500.1, 4607.2, 6277.2], dur:7577.5},
+   starts:[0.0, 2500.1, 4607.2, 6276.3], dur:7576.6},
   {file:"continuous-s2-part2.mp3", season:"s2", part:2, episodes:[27, 28, 29, 30, 31],
    titles:["Between Two Homes", "Not Your Secret", "What's Playing?", "Just Between Us", "When Heaven Is Quiet"],
-   starts:[0.0, 1290.02, 2892.62, 4295.16, 5961.8], dur:7056.83},
-  {file:"continuous-s2-part3.mp3", season:"s2", part:3, episodes:[26],
-   titles:["The Empty Chair"],
-   starts:[0.0], dur:1159.76},
+   starts:[0.0, 1290.02, 2892.62, 4295.16, 5963.76], dur:7058.79},
+  {file:"continuous-s2-part3.mp3", season:"s2", part:3, episodes:[26, 32],
+   titles:["The Empty Chair", "The Screenshot"],
+   starts:[0.0, 1161.61], dur:2669.89},
 ];
 
 var audio = document.getElementById('player');
