@@ -204,7 +204,7 @@ var EPISODES = [
   {n:50, title:"The Open Door", dur:"14:05", file:"episode-50-the-open-door.mp3",
    desc:"Willa Hartwell notices that new student Kaspar Linden always eats lunch alone, and when she learns he is staying in temporary accommodation, she wants to help. But her first attempts to help \u2014 offered in front of everyone, without asking \u2014 only embarrass him. With advice from her mother and her youth pastor, Willa learns that real kindness starts by listening and respecting a person's dignity instead of making assumptions. This episode follows Willa as she tries again, quietly and carefully, to offer Kaspar a place to belong. Based on Matthew 25, it is a story about noticing the people others overlook and opening a door \u2014 gently."},
   {n:51, title:"The Words Between Us", dur:"22:45", file:"episode-51-the-words-between-us.mp3",
-   desc:"Talia Mercer, 16, wears hearing aids \u2014 and has become very good at pretending she hears everything. When a misunderstanding at lunch leaves her best friend Harper believing Talia ignored something important, Talia has to decide whether to keep smiling through the gaps or finally explain what she needs. A story about hearing loss, friendship, and learning to ask for room to belong, set in Ottawa."}},
+   desc:"Talia Mercer, 16, wears hearing aids \u2014 and has become very good at pretending she hears everything. When a misunderstanding at lunch leaves her best friend Harper believing Talia ignored something important, Talia has to decide whether to keep smiling through the gaps or finally explain what she needs. A story about hearing loss, friendship, and learning to ask for room to belong, set in Ottawa."},
   {n:52, title:"Ready to Say Yes", dur:"25:24", file:"episode-52-ready-to-say-yes.mp3",
    desc:"Juniper Hale is sixteen and has been thinking about baptism for a while, but she isn't sure she's ready. Standing by the baptistry after church one Sunday, she wonders whether she's good enough, what people will think, and whether she's waiting for a feeling that may never come. Over the week she talks honestly with her mum, her best friend Noor, and Pastor Daniel, learning that baptism is about trusting Jesus rather than being perfect. This episode follows Juniper as she asks her questions out loud, prays through her doubts, and works out what it really means to follow Jesus publicly."}
 ];
@@ -308,7 +308,7 @@ function appendEpisode(ep, i){
       '<p>' + ep.desc + '</p>' +
     '</span>' +
     '<span class="dur">' + ep.dur + '</span>';
-  b.addEventListener('click', function(){ loadEpisode(i, true); });
+  b.addEventListener('click', function(){ playEpisodeContinuous(i); });
   li.appendChild(b);
   var target = listTargetFor(ep);
   if(target) target.appendChild(li);
@@ -404,9 +404,11 @@ setInterval(checkForNewEpisodes, AUTO_UPDATE_MS);
    The now-playing title and lock-screen (Media Session) metadata follow
    the episode whose start offset the playhead has passed, using the
    chunk manifest's `starts` array. Tapping an episode, Play All or
-   Shuffle leaves continuous mode (loadEpisode exits it). Tapping the
-   chunk button again while it is on also exits it: the current chunk
-   keeps playing to its end, then per-episode behaviour takes over.
+   the play button starts continuous mode (the chunk file plays on
+   through every episode, then loops back to the start). Shuffle stays
+   per-episode. Tapping the chunk button again while it is on exits
+   continuous mode: the current chunk keeps playing to its end, then
+   per-episode behaviour takes over.
    Auto-update: chunks.json is polled every 5 minutes (same pattern as
    the episodes.json poller). Chunks are merged by file name — a rebuilt
    chunk updates in place, a brand-new chunk appends — and playback is
@@ -430,12 +432,33 @@ function clearPreload(){
 }
 function preloadNext(){
   if(chunkMode){
-    var nx = CHUNKS[chunkIdx + 1];
+    var nx = CHUNKS[chunkIdx + 1] || CHUNKS[0];
     if(nx) preloadUrl(CHUNK_BASE + nx.file);
     return;
   }
   var ni = nextInQueue();
   if(ni >= 0 && ni < EPISODES.length) preloadUrl(EPISODES[ni].file);
+}
+/* ---- Continuous-by-default: every play route goes through the chunk
+   files, so playback keeps going episode after episode even with the
+   phone screen off (one ~2h file needs no JavaScript at episode
+   boundaries). An episode not in any chunk yet (just published, chunks
+   not rebuilt) falls back to its own file. */
+function chunkForEpisode(n){
+  for(var ci = 0; ci < CHUNKS.length; ci++){
+    var ch = CHUNKS[ci];
+    for(var k = 0; k < ch.episodes.length; k++){
+      if(ch.episodes[k] === n) return {ci: ci, at: ch.starts[k] || 0};
+    }
+  }
+  return null;
+}
+function playEpisodeContinuous(i){
+  var ep = EPISODES[i];
+  if(!ep) return;
+  var c = chunkForEpisode(ep.n);
+  if(c){ loadChunk(c.ci, c.at, true); return; }
+  loadEpisode(i, true);
 }
 function episodeIndexByNumber(n){
   for(var i = 0; i < EPISODES.length; i++) if(EPISODES[i].n === n) return i;
@@ -517,6 +540,8 @@ function nextChunkEpisode(){
     updateChunkEpisode();
   }else if(chunkIdx + 1 < CHUNKS.length){
     loadChunk(chunkIdx + 1, 0, true);
+  }else{
+    loadChunk(0, 0, true);
   }
 }
 function prevChunkEpisode(){
@@ -597,7 +622,7 @@ function loadEpisode(i, autoplay){
 }
 
 function togglePlay(){
-  if(current < 0){ loadEpisode(0, true); return; }
+  if(current < 0){ playEpisodeContinuous(0); return; }
   if(audio.paused){ audio.play(); } else { audio.pause(); }
 }
 
@@ -654,12 +679,14 @@ audio.addEventListener('ended', function(){
   savePosition(0);
   if(chunkMode){
     if(chunkIdx + 1 < CHUNKS.length){ loadChunk(chunkIdx + 1, 0, true); }
-    else{ playBtn.innerHTML = '&#9654;'; }
+    else{ loadChunk(0, 0, true); }
     return;
   }
   var nxt = nextInQueue();
   if(continuousEl.checked && nxt >= 0 && nxt < EPISODES.length){
     loadEpisode(nxt, true);
+  }else if(continuousEl.checked){
+    loadEpisode(0, true);
   }else{
     playBtn.innerHTML = '&#9654;';
   }
@@ -688,7 +715,7 @@ document.getElementById('nextBtn').addEventListener('click', function(){
 document.getElementById('playAllBtn').addEventListener('click', function(){
   setShuffle(false);
   continuousEl.checked = true;
-  loadEpisode(0, true);
+  playEpisodeContinuous(0);
   document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
 });
 document.getElementById('shuffleBtn').addEventListener('click', function(){
