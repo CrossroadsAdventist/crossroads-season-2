@@ -577,7 +577,18 @@ function loadChunk(ci, startAt, autoplay){
   preloadNext();
   if(autoplay){
     var p = audio.play();
-    if(p && p.catch) p.catch(function(){ /* waiting for a tap is fine */ });
+    if(p && p.catch) p.catch(function(){
+      /* A chunk boundary play() can be refused (e.g. page backgrounded);
+         retry once shortly after — guarded so a stale retry never starts
+         playback after the user has moved on. */
+      var ci = chunkIdx, f = chunkMode ? CHUNKS[ci].file : '';
+      setTimeout(function(){
+        if(chunkMode && chunkIdx === ci && CHUNKS[ci] && CHUNKS[ci].file === f && audio.paused){
+          var p2 = audio.play();
+          if(p2 && p2.catch) p2.catch(function(){});
+        }
+      }, 1200);
+    });
   }
 }
 function exitChunkMode(){
@@ -767,6 +778,16 @@ audio.addEventListener('ended', function(){
   }
 });
 audio.addEventListener('error', function(){
+  /* If a chunk file fails to load (network / decode / unsupported - NOT an
+     aborted load from a quick tap), don't strand playback at the end of the
+     previous season: fall back to the first episode of the failed chunk as
+     its own file, so Play All keeps going into the next season instead of
+     stopping silently. loadEpisode exits chunk mode, so a failing episode
+     file can never loop this handler. */
+  if(chunkMode && chunkIdx >= 0 && CHUNKS[chunkIdx] && audio.error && audio.error.code > 1){
+    var ei = episodeIndexByNumber(CHUNKS[chunkIdx].episodes[0]);
+    if(ei >= 0){ loadEpisode(ei, true); return; }
+  }
   nowSub.textContent = 'This episode couldn\u2019t load just now. Check your connection and tap play again.';
 });
 
