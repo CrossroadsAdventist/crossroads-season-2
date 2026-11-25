@@ -248,6 +248,8 @@ var current = -1;
 var shuffleOn = false;
 var shuffleQueue = [];
 var shufflePos = -1;
+var shuffleChunks = [];
+var shuffleChunkPos = -1;
 
 function shuffleArray(a){
   for(var i = a.length - 1; i > 0; i--){
@@ -265,6 +267,19 @@ function makeShuffleQueue(first){
   }
   return idxs;
 }
+/* Chunk shuffle: mirrors the per-episode queue, but over CHUNKS indexes.
+   With shuffle on, chunk mode plays each chunk once in shuffled order
+   (starting at the chunk holding the episode that started playback),
+   then reshuffles — so screen-off playback is randomised too. */
+function makeChunkShuffleQueue(first){
+  var idxs = CHUNKS.map(function(_, i){ return i; });
+  shuffleArray(idxs);
+  if(typeof first === 'number' && first >= 0){
+    var k = idxs.indexOf(first);
+    if(k > 0){ idxs.splice(k, 1); idxs.unshift(first); }
+  }
+  return idxs;
+}
 function setShuffle(on){
   shuffleOn = on;
   var b = document.getElementById('shuffleBtn');
@@ -272,9 +287,18 @@ function setShuffle(on){
   if(on){
     shuffleQueue = makeShuffleQueue(current);
     shufflePos = current >= 0 ? 0 : -1;
+    if(chunkMode && chunkIdx >= 0){
+      shuffleChunks = makeChunkShuffleQueue(chunkIdx);
+      shuffleChunkPos = 0;
+    }else{
+      shuffleChunks = [];
+      shuffleChunkPos = -1;
+    }
   }else{
     shuffleQueue = [];
     shufflePos = -1;
+    shuffleChunks = [];
+    shuffleChunkPos = -1;
   }
 }
 function nextInQueue(){
@@ -289,10 +313,25 @@ function prevInQueue(){
   if(shufflePos > 0) return shuffleQueue[shufflePos - 1];
   return -1;
 }
+/* Next / previous chunk, honouring shuffle: in order when shuffle is off,
+   through the shuffled chunk queue when it is on (reshuffle when the
+   queue is exhausted, so no chunk repeats until all have played). */
+function nextChunkIdx(){
+  if(!shuffleOn) return chunkIdx + 1 < CHUNKS.length ? chunkIdx + 1 : 0;
+  if(shuffleChunkPos + 1 < shuffleChunks.length) return shuffleChunks[shuffleChunkPos + 1];
+  shuffleChunks = makeChunkShuffleQueue(-1);
+  shuffleChunkPos = -1;
+  return shuffleChunks.length ? shuffleChunks[0] : -1;
+}
+function prevChunkIdx(){
+  if(!shuffleOn) return chunkIdx - 1;
+  if(shuffleChunkPos > 0) return shuffleChunks[shuffleChunkPos - 1];
+  return -1;
+}
 function startShuffle(){
   setShuffle(true);
   continuousEl.checked = true;
-  loadEpisode(shuffleQueue[0], true);
+  playEpisodeContinuous(shuffleQueue[0]);
   document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
@@ -417,10 +456,11 @@ setInterval(checkForNewEpisodes, AUTO_UPDATE_MS);
    the episode whose start offset the playhead has passed, using the
    chunk manifest's `starts` array. Tapping an episode, Play All or
    the play button starts continuous mode (the chunk file plays on
-   through every episode, then loops back to the start). Shuffle stays
-   per-episode. Tapping the chunk button again while it is on exits
-   continuous mode: the current chunk keeps playing to its end, then
-   per-episode behaviour takes over.
+   through every episode, then loops back to the start). Shuffle shuffles
+   the chunks too: with shuffle on, chunks play in shuffled order (each
+   chunk once, then reshuffle). Tapping the chunk button again while it
+   is on exits continuous mode: the current chunk keeps playing to its
+   end, then per-episode behaviour takes over.
    Auto-update: chunks.json is polled every 5 minutes (same pattern as
    the episodes.json poller). Chunks are merged by file name — a rebuilt
    chunk updates in place, a brand-new chunk appends — and playback is
@@ -444,7 +484,8 @@ function clearPreload(){
 }
 function preloadNext(){
   if(chunkMode){
-    var nx = CHUNKS[chunkIdx + 1] || CHUNKS[0];
+    var ni = nextChunkIdx();
+    var nx = (ni >= 0 && ni < CHUNKS.length) ? CHUNKS[ni] : null;
     if(nx) preloadUrl(CHUNK_BASE + nx.file);
     return;
   }
@@ -509,10 +550,15 @@ function updateChunkEpisode(){
 }
 function loadChunk(ci, startAt, autoplay){
   if(ci < 0 || ci >= CHUNKS.length) return;
-  setShuffle(false);
   chunkMode = true;
   chunkIdx = ci;
   chunkEpIdx = -1;
+  if(shuffleOn){
+    if(!shuffleChunks.length || shuffleChunks.indexOf(ci) < 0){
+      shuffleChunks = makeChunkShuffleQueue(ci);
+    }
+    shuffleChunkPos = shuffleChunks.indexOf(ci);
+  }
   var ch = CHUNKS[ci];
   var b = document.getElementById('chunkBtn');
   if(b) b.classList.add('active');
@@ -550,10 +596,9 @@ function nextChunkEpisode(){
   if(k + 1 < ch.episodes.length){
     audio.currentTime = ch.starts[k + 1] + 0.5;
     updateChunkEpisode();
-  }else if(chunkIdx + 1 < CHUNKS.length){
-    loadChunk(chunkIdx + 1, 0, true);
   }else{
-    loadChunk(0, 0, true);
+    var ni = nextChunkIdx();
+    if(ni >= 0) loadChunk(ni, 0, true);
   }
 }
 function prevChunkEpisode(){
@@ -567,19 +612,31 @@ function prevChunkEpisode(){
   }else if(k > 0){
     audio.currentTime = ch.starts[k - 1] + 0.5;
     updateChunkEpisode();
-  }else if(chunkIdx > 0){
-    var prev = CHUNKS[chunkIdx - 1];
-    loadChunk(chunkIdx - 1, Math.max(0, prev.dur - 5), true);
   }else{
-    audio.currentTime = 0;
-    updateChunkEpisode();
+    var pi = prevChunkIdx();
+    if(pi >= 0){
+      var prev = CHUNKS[pi];
+      loadChunk(pi, Math.max(0, prev.dur - 5), true);
+    }else{
+      audio.currentTime = 0;
+      updateChunkEpisode();
+    }
   }
 }
 function startChunkMode(){
   if(chunkMode){ exitChunkMode(); return; }
-  setShuffle(false);
   continuousEl.checked = true;
-  loadChunk(0, 0, true);
+  if(shuffleOn){
+    var ci = -1;
+    if(current >= 0){
+      var cc = chunkForEpisode(EPISODES[current].n);
+      if(cc) ci = cc.ci;
+    }
+    if(ci < 0) ci = Math.floor(Math.random() * CHUNKS.length);
+    loadChunk(ci, 0, true);
+  }else{
+    loadChunk(0, 0, true);
+  }
   document.querySelector('.card').scrollIntoView({behavior:'smooth', block:'start'});
 }
 function checkForNewChunks(){
@@ -597,7 +654,13 @@ function checkForNewChunks(){
       if(byFile[c.file] != null){
         CHUNKS[byFile[c.file]] = c;
       }else{
+        var nci = CHUNKS.length;
         CHUNKS.push(c);
+        if(shuffleOn){
+          var lo = Math.max(0, shuffleChunkPos + 1);
+          var pos = lo + Math.floor(Math.random() * (shuffleChunks.length - lo + 1));
+          shuffleChunks.splice(pos, 0, nci);
+        }
       }
     });
   }).catch(function(){ /* offline / not published yet — retry next poll */ });
@@ -690,8 +753,8 @@ audio.addEventListener('timeupdate', function(){
 audio.addEventListener('ended', function(){
   savePosition(0);
   if(chunkMode){
-    if(chunkIdx + 1 < CHUNKS.length){ loadChunk(chunkIdx + 1, 0, true); }
-    else{ loadChunk(0, 0, true); }
+    var ni = nextChunkIdx();
+    if(ni >= 0) loadChunk(ni, 0, true);
     return;
   }
   var nxt = nextInQueue();
