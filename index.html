@@ -34,6 +34,7 @@
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:center}
   .now-title{font-size:1.15rem;font-weight:700;margin:2px 0 2px}
   .now-sub{color:var(--muted);font-size:.9rem;margin:0 0 12px}
+  .now-pos{color:var(--gold-soft);font-size:.92rem;margin:0 0 8px;font-variant-numeric:tabular-nums}
   .seek{display:flex;align-items:center;gap:10px;margin:6px 0 2px}
   .seek time{font-variant-numeric:tabular-nums;font-size:.88rem;color:var(--muted);
     min-width:44px}
@@ -91,6 +92,7 @@
   <section class="card" aria-label="Now playing">
     <p class="now-title" id="nowTitle">Nothing playing yet</p>
     <p class="now-sub" id="nowSub">Pick an episode below, or press Play All.</p>
+    <p class="now-pos" id="nowPos"></p>
     <div class="seek">
       <time id="curTime">0:00</time>
       <input type="range" id="seek" min="0" max="0" step="1" value="0" aria-label="Seek">
@@ -241,6 +243,7 @@ var curTimeEl = document.getElementById('curTime');
 var totTimeEl = document.getElementById('totTime');
 var nowTitle = document.getElementById('nowTitle');
 var nowSub = document.getElementById('nowSub');
+var nowPos = document.getElementById('nowPos');
 var playBtn = document.getElementById('playBtn');
 var listEl = document.getElementById('episodeList');
 var continuousEl = document.getElementById('continuous');
@@ -346,6 +349,65 @@ function fmt(s){
   }
   return m + ":" + (r < 10 ? "0" : "") + r;
 }
+/* ---- Episode-relative display (chunk mode) ----
+   In chunk mode the <audio> element holds a ~2h chunk file, so
+   audio.currentTime / audio.duration are chunk positions. The Now
+   Playing panel instead shows the CURRENT EPISODE: elapsed and total
+   are measured inside the episode (chunk position minus the episode's
+   start offset in the chunk), and the seek slider spans just the
+   current episode. A playlist line shows the episode's place in the
+   list and the full playlist length, so Play All never looks like a
+   single ~2h recording. */
+var loadSeq = 0; /* bumps on every load - stale loadedmetadata handlers bail */
+function durSeconds(d){
+  var p = String(d).split(':');
+  return (+p[0]) * 60 + (+p[1]);
+}
+/* Start offset of the current episode inside its chunk, and the
+   episode's span inside the chunk (next start, or chunk end). */
+function chunkEpisodeSpan(){
+  if(!chunkMode || chunkIdx < 0 || chunkEpIdx < 0) return null;
+  var ch = CHUNKS[chunkIdx];
+  if(!ch || !ch.starts || chunkEpIdx >= ch.starts.length) return null;
+  var start = ch.starts[chunkEpIdx] || 0;
+  var end = (chunkEpIdx + 1 < ch.starts.length) ? ch.starts[chunkEpIdx + 1] : ch.dur;
+  return {start: start, span: Math.max(0, end - start)};
+}
+function episodeElapsed(){
+  if(chunkMode){
+    var s = chunkEpisodeSpan();
+    if(!s) return 0;
+    return Math.max(0, Math.min(s.span, (audio.currentTime || 0) - s.start));
+  }
+  return audio.currentTime || 0;
+}
+function episodeTotal(){
+  /* The episode's listed duration is the displayed total (it matches
+     the episode list and Spotify); the chunk span is the same audio
+     within a second, except where the listing was once stale - take
+     the longer so the total never reads shorter than the audio. */
+  var listed = (current >= 0 && EPISODES[current]) ? durSeconds(EPISODES[current].dur) : 0;
+  if(chunkMode){
+    var s = chunkEpisodeSpan();
+    if(s) return Math.max(listed, s.span);
+  }
+  if(listed) return listed;
+  return audio.duration || 0;
+}
+function refreshSeekDisplay(){
+  var el = episodeElapsed(), tot = episodeTotal();
+  curTimeEl.textContent = fmt(el);
+  totTimeEl.textContent = fmt(tot);
+  seek.max = Math.floor(tot);
+  if(!seek.matches(':active')){
+    seek.value = Math.floor(el);
+  }
+  if(current >= 0 && EPISODES[current]){
+    nowPos.textContent = 'Episode ' + EPISODES[current].n + ' \u00b7 ' + (current + 1) +
+      ' of ' + EPISODES.length + ' \u00b7 ' + totalLabel() + ' total';
+  }
+}
+
 
 function appendEpisode(ep, i){
   var li = document.createElement('li');
@@ -526,10 +588,10 @@ function chunkEpisodeAt(t){
   }
   return k;
 }
-function updateChunkEpisode(){
+function updateChunkEpisode(t){
   if(!chunkMode || chunkIdx < 0) return;
   var ch = CHUNKS[chunkIdx];
-  var k = chunkEpisodeAt(audio.currentTime || 0);
+  var k = chunkEpisodeAt(typeof t === 'number' ? t : (audio.currentTime || 0));
   if(k === chunkEpIdx) return;
   chunkEpIdx = k;
   var ei = episodeIndexByNumber(ch.episodes[k]);
@@ -547,9 +609,11 @@ function updateChunkEpisode(){
     });
   }
   savePosition(audio.currentTime);
+  refreshSeekDisplay();
 }
 function loadChunk(ci, startAt, autoplay){
   if(ci < 0 || ci >= CHUNKS.length) return;
+  loadSeq++;
   chunkMode = true;
   chunkIdx = ci;
   chunkEpIdx = -1;
@@ -564,12 +628,20 @@ function loadChunk(ci, startAt, autoplay){
   if(b) b.classList.add('active');
   audio.src = CHUNK_BASE + ch.file;
   audio.load();
-  totTimeEl.textContent = fmt(ch.dur);
-  updateChunkEpisode();
+  /* Show the episode the playhead is heading to right away (not the
+     chunk's first episode) when jumping into the middle of a chunk. */
+  updateChunkEpisode(startAt > 0 ? startAt : 0);
+  refreshSeekDisplay();
   if(startAt > 0){
+    /* Guarded by loadSeq: if the user taps something else before this
+       chunk's metadata loads, the stale handler must NOT yank the new
+       load's playhead back to this old startAt (that once showed
+       Episode 1 at 55:45 right after Play All). */
+    var seq = loadSeq;
     var once = function(){
-      try{ audio.currentTime = Math.min(startAt, (audio.duration || startAt + 1) - 5); }catch(e){}
       audio.removeEventListener('loadedmetadata', once);
+      if(seq !== loadSeq) return;
+      try{ audio.currentTime = Math.min(startAt, (audio.duration || startAt + 1) - 5); }catch(e){}
       updateChunkEpisode();
     };
     audio.addEventListener('loadedmetadata', once);
@@ -682,6 +754,7 @@ document.getElementById('chunkBtn').addEventListener('click', startChunkMode);
 
 function loadEpisode(i, autoplay){
   if(i < 0 || i >= EPISODES.length) return;
+  loadSeq++;
   exitChunkMode();
   current = i;
   if(shuffleOn) shufflePos = shuffleQueue.indexOf(i);
@@ -690,8 +763,8 @@ function loadEpisode(i, autoplay){
   audio.load();
   nowTitle.textContent = 'Episode ' + ep.n + ' \u2014 ' + ep.title;
   nowSub.textContent = ep.desc + ' \u00b7 ' + ep.dur;
-  totTimeEl.textContent = ep.dur;
   markCurrent();
+  refreshSeekDisplay();
   savePosition(0);
   if('mediaSession' in navigator){
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -738,9 +811,11 @@ function restorePosition(){
     if(typeof s.i !== 'number' || s.i < 0 || s.i >= EPISODES.length) return;
     loadEpisode(s.i, false);
     if(typeof s.t === 'number' && s.t > 10){
+      var seq = loadSeq;
       var once = function(){
-        try{ audio.currentTime = Math.min(s.t, (audio.duration || s.t + 1) - 5); }catch(e){}
         audio.removeEventListener('loadedmetadata', once);
+        if(seq !== loadSeq) return;
+        try{ audio.currentTime = Math.min(s.t, (audio.duration || s.t + 1) - 5); }catch(e){}
       };
       audio.addEventListener('loadedmetadata', once);
     }
@@ -750,15 +825,13 @@ function restorePosition(){
 audio.addEventListener('play', function(){ playBtn.innerHTML = '&#10074;&#10074;'; });
 audio.addEventListener('pause', function(){ playBtn.innerHTML = '&#9654;'; });
 audio.addEventListener('loadedmetadata', function(){
+  if(chunkMode){ refreshSeekDisplay(); return; }
   seek.max = Math.floor(audio.duration || 0);
   totTimeEl.textContent = fmt(audio.duration);
 });
 audio.addEventListener('timeupdate', function(){
-  if(!seek.matches(':active')){
-    seek.value = Math.floor(audio.currentTime || 0);
-  }
-  curTimeEl.textContent = fmt(audio.currentTime);
   if(chunkMode) updateChunkEpisode();
+  refreshSeekDisplay();
   if(Math.floor(audio.currentTime || 0) % 5 === 0) savePosition(audio.currentTime);
 });
 audio.addEventListener('ended', function(){
@@ -792,8 +865,16 @@ audio.addEventListener('error', function(){
 });
 
 seek.addEventListener('input', function(){
-  audio.currentTime = parseFloat(seek.value) || 0;
-  curTimeEl.textContent = fmt(audio.currentTime);
+  var v = parseFloat(seek.value) || 0;
+  if(chunkMode){
+    /* The slider spans the current episode only: map its value back
+       into the chunk at the episode's start offset. */
+    var s = chunkEpisodeSpan();
+    if(s) audio.currentTime = s.start + Math.max(0, Math.min(s.span, v));
+  }else{
+    audio.currentTime = v;
+  }
+  curTimeEl.textContent = fmt(episodeElapsed());
 });
 
 playBtn.addEventListener('click', togglePlay);
